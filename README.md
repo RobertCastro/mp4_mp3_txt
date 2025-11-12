@@ -102,9 +102,20 @@ mp4_mp3_txt/
 
 ## Notas Importantes
 
-1. **Nombres de archivos**: Los archivos de salida mantendrán el mismo nombre que los archivos de entrada, solo cambiará la extensión.
+1. **División automática de archivos grandes**: Si un archivo MP3 es mayor a 50 MB (configurable), se dividirá automáticamente en chunks más pequeños de 30 minutos cada uno. Los chunks se nombran como `original_part1.mp3`, `original_part2.mp3`, etc. Después de transcribir, los archivos de texto se unen automáticamente en un solo archivo `original.txt`.
+   
+   **Configuración**:
+   ```bash
+   # Cambiar tamaño máximo antes de dividir (por defecto: 50 MB)
+   export MP3_MAX_SIZE_MB=60
+   
+   # Cambiar duración de cada chunk en minutos (por defecto: 30)
+   export MP3_CHUNK_MINUTES=20
+   ```
 
-2. **Modelo de Whisper**: El script usa el modelo `tiny` por defecto para reducir el uso de memoria (~1GB). Si tienes más memoria disponible y quieres mejor calidad, puedes cambiar el modelo usando una variable de entorno:
+2. **Nombres de archivos**: Los archivos de salida mantendrán el mismo nombre que los archivos de entrada, solo cambiará la extensión.
+
+3. **Modelo de Whisper**: El script usa el modelo `tiny` por defecto para reducir el uso de memoria (~1GB). Si tienes más memoria disponible y quieres mejor calidad, puedes cambiar el modelo usando una variable de entorno:
    ```bash
    # Para usar el modelo 'base' (mejor calidad, similar memoria)
    export WHISPER_MODEL=base
@@ -122,14 +133,39 @@ mp4_mp3_txt/
    - `medium`: ~5GB RAM, muy buena precisión
    - `large`: ~10GB RAM, mejor precisión
 
-3. **Archivos existentes**: Si un archivo de texto ya existe, el script de transcripción lo saltará automáticamente.
+4. **Archivos existentes**: Si un archivo de texto ya existe, el script de transcripción lo saltará automáticamente.
 
-4. **Idioma**: Whisper detecta automáticamente el idioma del audio. Si necesitas especificar un idioma, puedes modificar el script para agregar el parámetro `language` en la función `transcribe()`.
+5. **Idioma**: Por defecto, el script fuerza el idioma a español (`es`). Puedes cambiar esto con una variable de entorno:
+   ```bash
+   # Forzar español (por defecto)
+   export WHISPER_LANGUAGE=es
+   python mp3_to_txt.py
+   
+   # Forzar inglés
+   export WHISPER_LANGUAGE=en
+   python mp3_to_txt.py
+   
+   # Detección automática (si prefieres que Whisper detecte el idioma)
+   export WHISPER_LANGUAGE=auto
+   python mp3_to_txt.py
+   ```
+   
+   Códigos de idioma comunes: `es` (español), `en` (inglés), `fr` (francés), `de` (alemán), `it` (italiano), `pt` (portugués), etc.
 
-5. **Optimización de memoria**: El script está optimizado para usar menos memoria:
+6. **Optimización de memoria**: El script está ULTRA-optimizado para usar la mínima memoria posible:
+   - **Modo por defecto**: Carga y descarga el modelo para cada archivo (más lento pero usa MUCHO menos memoria)
    - Usa CPU por defecto (evita problemas de VRAM)
-   - Limpia memoria después de cada transcripción
-   - Usa parámetros que reducen el consumo de memoria
+   - Desactiva gradientes de PyTorch
+   - Usa `torch.inference_mode()` para reducir memoria
+   - Usa beam_size=1 (greedy decoding) para mínimo uso de memoria
+   - Usa best_of=1 para evitar múltiples intentos
+   - Limpia memoria agresivamente después de cada transcripción
+   
+   **Para desactivar el modo ultra-optimizado** (más rápido pero usa más memoria):
+   ```bash
+   export WHISPER_LOAD_PER_FILE=false
+   python mp3_to_txt.py
+   ```
 
 ## Solución de Problemas
 
@@ -146,10 +182,19 @@ mp4_mp3_txt/
 
 ### Error: "Killed" o proceso terminado
 - Esto indica que el proceso se quedó sin memoria (OOM)
-- **Solución**: El script ahora usa el modelo `tiny` por defecto que requiere menos memoria
-- Si aún tienes problemas, asegúrate de tener al menos 2GB de RAM libre
-- Cierra otras aplicaciones que usen mucha memoria
-- Considera procesar los archivos de uno en uno
+- **Soluciones implementadas**:
+  1. El script usa el modelo `tiny` por defecto
+  2. Carga y descarga el modelo para cada archivo (modo ultra-optimizado activado por defecto)
+  3. Usa parámetros que minimizan el uso de memoria
+  4. Divide automáticamente archivos MP3 mayores a 50 MB en chunks más pequeños
+  5. Une automáticamente los archivos de texto resultantes
+- **Si aún tienes problemas**:
+  - Asegúrate de tener al menos 1.5GB de RAM libre
+  - Cierra otras aplicaciones que usen mucha memoria
+  - Verifica que el modo ultra-optimizado esté activado: `export WHISPER_LOAD_PER_FILE=true`
+  - Reduce el tamaño máximo antes de dividir: `export MP3_MAX_SIZE_MB=40`
+  - Reduce la duración de los chunks: `export MP3_CHUNK_MINUTES=20`
+  - Si tienes muy poca RAM, considera usar un servicio de transcripción en la nube
 
 ### Rendimiento lento
 - El modelo `tiny` es el más rápido pero menos preciso
